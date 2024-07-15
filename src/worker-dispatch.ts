@@ -77,8 +77,9 @@ export default class WorkerDispatch {
   getElevation = (
     managerId: number,
     latlng: [number, number],
+    scheme: 'tms' | 'xyz',
     abortController: AbortController,
   ): Promise<number> =>
-    this.managers[managerId]?.getElevation(latlng, abortController) ??
+    this.managers[managerId]?.getElevation(latlng, scheme, abortController) ??
     managerId;
 }
