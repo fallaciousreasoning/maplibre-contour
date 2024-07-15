@@ -267,11 +267,9 @@ export class LocalDemManager implements DemManager {
 
     const latRad = (lat / 180) * Math.PI;
     const xtile = n * ((lon + 180) / 360);
-    const ytile = Math.floor(
+    const ytile =
       ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
-        n,
-    );
-    console.log(latRad, xtile, ytile);
+      n;
 
     const x = Math.floor(xtile);
     const y = Math.floor(ytile);
