@@ -254,4 +254,36 @@ export class LocalDemManager implements DemManager {
       parentAbortController,
     );
   }
+
+  async getElevation(
+    [lat, lon]: [number, number],
+    abortController: AbortController,
+  ): Promise<number> {
+    const zoom = this.maxzoom;
+    const n = 2 ** zoom;
+
+    lat %= 360;
+    if (lat < 0) lat += 360;
+
+    const latRad = (lat / 180) * Math.PI;
+    const xtile = n * ((lon + 180) / 360);
+    const ytile = Math.floor(
+      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
+        n,
+    );
+    console.log(latRad, xtile, ytile);
+
+    const x = Math.floor(xtile);
+    const y = Math.floor(ytile);
+
+    const remainderX = xtile - x;
+    const remainderY = ytile - y;
+    const tile = await this.fetchAndParseTile(zoom, x, y, abortController);
+    const heightTile = HeightTile.fromRawDem(tile);
+
+    const tileX = Math.floor(tile.width * remainderX);
+    const tileY = Math.floor(tile.width * remainderY);
+
+    return heightTile.get(tileX, tileY);
+  }
 }

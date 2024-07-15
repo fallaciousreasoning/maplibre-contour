@@ -73,4 +73,12 @@ export default class WorkerDispatch {
         timer,
       ) || noManager(managerId),
     );
+
+  getElevation = (
+    managerId: number,
+    latlng: [number, number],
+    abortController: AbortController,
+  ): Promise<number> =>
+    this.managers[managerId]?.getElevation(latlng, abortController) ??
+    managerId;
 }

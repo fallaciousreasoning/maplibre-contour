@@ -110,4 +110,16 @@ export default class RemoteDemManager implements DemManager {
       y,
       options,
     );
+  getElevation = (
+    latlng: [number, number],
+    abortController: AbortController,
+  ): Promise<number> =>
+    this.actor.send(
+      "getElevation",
+      [],
+      abortController,
+      undefined,
+      this.managerId,
+      latlng,
+    );
 }

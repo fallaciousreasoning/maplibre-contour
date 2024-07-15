@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "tsc --noEmit && esbuild index.ts --bundle"
+    "test": "tsc --noEmit && esbuild index.ts --bundle > main.js",
+    "dev": "esbuild index.ts --bundle --outdir=dist --watch"
   },
   "author": "",
   "license": "ISC",
