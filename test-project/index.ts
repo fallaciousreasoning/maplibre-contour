@@ -8,6 +8,9 @@ const demSource = new mlcontour.DemSource({
 });
 
 window.demSource = demSource;
+window.mtcook = [-43.595, 170.141944];
+window.rolleston = [-42.9114, 171.51246];
+window.sevenHund = [-42.99145, 171.50867];
 
 // calls maplibregl.addProtocol for the shared cache and contour protocols
 demSource.setupMaplibre(maplibregl);
