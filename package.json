@@ -25,7 +25,8 @@
     "format": "prettier src --write",
     "checkformat": "prettier src --check",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run test && npm run build"
+    "prepublishOnly": "npm run test && npm run build",
+    "prepare": "npm run build"
   },
   "repository": {
     "type": "git",
