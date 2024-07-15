@@ -43,6 +43,7 @@ export interface DemManager {
   ): Promise<ContourTile>;
   getElevation(
     latlng: [number, number],
+    scheme: 'tms' | 'xyz',
     abortController: AbortController,
   ): Promise<number>;
 }
@@ -288,6 +289,7 @@ export class LocalDemManager implements DemManager {
 
   async getElevation(
     [lat, lon]: [number, number],
+    scheme: 'tms' | 'xyz',
     abortController: AbortController,
   ): Promise<number> {
     const zoom = this.maxzoom;
@@ -298,9 +300,13 @@ export class LocalDemManager implements DemManager {
 
     const latRad = (lat / 180) * Math.PI;
     const xtile = n * ((lon + 180) / 360);
-    const ytile =
+    let ytile =
       ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
       n;
+
+    if (scheme === 'tms') {
+      ytile = n - ytile
+    }
 
     const x = Math.floor(xtile);
     const y = Math.floor(ytile);
@@ -313,6 +319,7 @@ export class LocalDemManager implements DemManager {
     const tileX = Math.floor(tile.width * remainderX);
     const tileY = Math.floor(tile.width * remainderY);
 
-    return heightTile.get(tileX, tileY);
+    const actualY = scheme === 'tms' ? tile.height - tileY : tileY
+    return heightTile.get(tileX, actualY);
   }
 }

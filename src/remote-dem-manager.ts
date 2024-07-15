@@ -122,6 +122,7 @@ export default class RemoteDemManager implements DemManager {
     );
   getElevation = (
     latlng: [number, number],
+    scheme: 'tms' | 'xyz',
     abortController: AbortController,
   ): Promise<number> =>
     this.actor.send(
@@ -131,5 +132,6 @@ export default class RemoteDemManager implements DemManager {
       undefined,
       this.managerId,
       latlng,
+      scheme
     );
 }
