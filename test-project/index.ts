@@ -7,6 +7,8 @@ const demSource = new mlcontour.DemSource({
   maxzoom: 13,
 });
 
+window.demSource = demSource;
+
 // calls maplibregl.addProtocol for the shared cache and contour protocols
 demSource.setupMaplibre(maplibregl);
 
