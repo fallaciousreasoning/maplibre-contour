@@ -12,6 +12,7 @@ import {
 } from "./types";
 import encodeVectorTile, { GeomType } from "./vtpbf";
 import { Timer } from "./performance";
+import { getData } from "./remote-protocol-handler";
 
 /**
  * Holds cached tile state, and exposes `fetchContourTile` which fetches the necessary
@@ -104,17 +105,15 @@ export class LocalDemManager implements DemManager {
         const mark = timer?.marker("fetch");
         return withTimeout(
           this.timeoutMs,
-          fetch(url, options).then(async (response) => {
-            mark?.();
-            if (!response.ok) {
-              throw new Error(`Bad response: ${response.status} for ${url}`);
-            }
-            return {
-              data: await response.blob(),
-              expires: response.headers.get("expires") || undefined,
-              cacheControl: response.headers.get("cache-control") || undefined,
-            };
-          }),
+          getData(url, childAbortController)
+            .then(r => {
+              mark?.()
+              if (!r.data) {
+                throw new Error(`Bad response for ${url}`);
+
+              }
+              return r
+            }),
           childAbortController,
         );
       },
