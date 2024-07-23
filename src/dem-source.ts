@@ -10,6 +10,7 @@ import type {
 import type WorkerDispatch from "./worker-dispatch";
 import Actor from "./actor";
 import { Timer } from "./performance";
+import registerMapLibreProtocolHandler from "./protocol-handler";
 
 if (!Blob.prototype.arrayBuffer) {
   Blob.prototype.arrayBuffer = function arrayBuffer() {
@@ -55,35 +56,37 @@ type ResponseCallbackV3 = (
 type V3OrV4Protocol = <
   T extends AbortController | ResponseCallbackV3,
   R = T extends AbortController
-    ? Promise<GetResourceResponse<ArrayBuffer>>
-    : { cancel: () => void },
+  ? Promise<GetResourceResponse<ArrayBuffer>>
+  : { cancel: () => void },
 >(
   requestParameters: RequestParameters,
   arg2: T,
 ) => R;
 
+export type GetProtocol = (url: string) => AddProtocolAction
+
 const v3compat =
   (v4: AddProtocolAction): V3OrV4Protocol =>
-  (requestParameters, arg2) => {
-    if (arg2 instanceof AbortController) {
-      return v4(requestParameters, arg2) as any;
-    } else {
-      const abortController = new AbortController();
-      v4(requestParameters, abortController)
-        .then(
-          (result) =>
-            arg2(
-              undefined,
-              result.data,
-              result.cacheControl as any,
-              result.expires as any,
-            ),
-          (err) => arg2(err),
-        )
-        .catch((err) => arg2(err));
-      return { cancel: () => abortController.abort() };
-    }
-  };
+    (requestParameters, arg2) => {
+      if (arg2 instanceof AbortController) {
+        return v4(requestParameters, arg2) as any;
+      } else {
+        const abortController = new AbortController();
+        v4(requestParameters, abortController)
+          .then(
+            (result) =>
+              arg2(
+                undefined,
+                result.data,
+                result.cacheControl as any,
+                result.expires as any,
+              ),
+            (err) => arg2(err),
+          )
+          .catch((err) => arg2(err));
+        return { cancel: () => abortController.abort() };
+      }
+    };
 
 const used = new Set<string>();
 
@@ -169,9 +172,15 @@ export class DemSource {
    */
   setupMaplibre = (maplibre: {
     addProtocol: (id: string, protcol: V3OrV4Protocol) => void;
+    getProtocol: GetProtocol
   }) => {
     maplibre.addProtocol(this.sharedDemProtocolId, this.sharedDemProtocol);
     maplibre.addProtocol(this.contourProtocolId, this.contourProtocol);
+
+    if ('actor' in this.manager) {
+      const worker = (this.manager.actor as any).dest
+      registerMapLibreProtocolHandler(maplibre.getProtocol, worker)
+    }
   };
 
   parseUrl(url: string): [number, number, number] {

@@ -16,23 +16,13 @@ import type {
 } from "./types";
 import encodeVectorTile, { GeomType } from "./vtpbf";
 import { Timer } from "./performance";
+import { getData } from "./remote-protocol-handler";
 
 const defaultGetTile: GetTileFunction = async (
   url: string,
   abortController: AbortController,
 ) => {
-  const options: RequestInit = {
-    signal: abortController.signal,
-  };
-  const response = await fetch(url, options);
-  if (!response.ok) {
-    throw new Error(`Bad response: ${response.status} for ${url}`);
-  }
-  return {
-    data: await response.blob(),
-    expires: response.headers.get("expires") || undefined,
-    cacheControl: response.headers.get("cache-control") || undefined,
-  };
+  return getData(url, abortController);
 };
 
 /**
