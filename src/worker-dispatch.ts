@@ -78,9 +78,10 @@ export default class WorkerDispatch {
     managerId: number,
     latlng: [number, number],
     scheme: 'tms' | 'xyz',
+    zoom: number,
+    retryAtReducedZoom: number,
     abortController: AbortController,
-    zoom?: number,
   ): Promise<number> =>
-    this.managers[managerId]?.getElevation(latlng, scheme, abortController, zoom) ??
+    this.managers[managerId]?.getElevation(latlng, scheme, zoom, retryAtReducedZoom, abortController) ??
     managerId;
 }

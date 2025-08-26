@@ -179,13 +179,13 @@ export class LocalDemManager implements DemManager {
               iy < 0 || iy >= max
                 ? undefined
                 : this.fetchDem(
-                    z,
-                    (ix + max) % max,
-                    iy,
-                    options,
-                    childAbortController,
-                    timer,
-                  ),
+                  z,
+                  (ix + max) % max,
+                  iy,
+                  options,
+                  childAbortController,
+                  timer,
+                ),
             );
           }
         }
@@ -248,36 +248,48 @@ export class LocalDemManager implements DemManager {
   async getElevation(
     [lat, lon]: [number, number],
     scheme: 'tms' | 'xyz',
+    zoom: number,
+    retryAtReducedZoom: number,
     abortController: AbortController,
-    zoom: number = this.maxzoom,
   ): Promise<number> {
-    const n = 2 ** zoom;
+    let currentZoom = zoom;
 
-    lat %= 360;
-    if (lat < 0) lat += 360;
+    while (currentZoom > 0 && (zoom - currentZoom) < retryAtReducedZoom) {
+      const n = 2 ** currentZoom;
 
-    const latRad = (lat / 180) * Math.PI;
-    const xtile = n * ((lon + 180) / 360);
-    let ytile =
-      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
-      n;
+      lat %= 360;
+      if (lat < 0) lat += 360;
 
-    if (scheme === 'tms') {
-      ytile = n - ytile
+      const latRad = (lat / 180) * Math.PI;
+      const xtile = n * ((lon + 180) / 360);
+      let ytile =
+        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
+        n;
+
+      if (scheme === 'tms') {
+        ytile = n - ytile
+      }
+
+      const x = Math.floor(xtile);
+      const y = Math.floor(ytile);
+
+      const remainderX = xtile - x;
+      const remainderY = ytile - y;
+
+      try {
+        const tile = await this.fetchAndParseTile(currentZoom, x, y, abortController);
+        const heightTile = HeightTile.fromRawDem(tile);
+
+        const tileX = Math.floor(tile.width * remainderX);
+        const tileY = Math.floor(tile.width * remainderY);
+
+        const actualY = scheme === 'tms' ? tile.height - tileY : tileY
+        return heightTile.get(tileX, actualY);
+      } catch (error) {
+        currentZoom -= 1
+      }
     }
 
-    const x = Math.floor(xtile);
-    const y = Math.floor(ytile);
-
-    const remainderX = xtile - x;
-    const remainderY = ytile - y;
-    const tile = await this.fetchAndParseTile(zoom, x, y, abortController);
-    const heightTile = HeightTile.fromRawDem(tile);
-
-    const tileX = Math.floor(tile.width * remainderX);
-    const tileY = Math.floor(tile.width * remainderY);
-
-    const actualY = scheme === 'tms' ? tile.height - tileY : tileY
-    return heightTile.get(tileX, actualY);
+    throw new Error(`Failed to get elevation after ${retryAtReducedZoom} attempts at zoom ${zoom} to ${currentZoom}`);
   }
 }
