@@ -249,8 +249,8 @@ export class LocalDemManager implements DemManager {
     [lat, lon]: [number, number],
     scheme: 'tms' | 'xyz',
     abortController: AbortController,
+    zoom: number = this.maxzoom,
   ): Promise<number> {
-    const zoom = this.maxzoom;
     const n = 2 ** zoom;
 
     lat %= 360;
