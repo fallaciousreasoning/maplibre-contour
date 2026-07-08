@@ -1,5 +1,6 @@
 import AsyncCache from "./cache";
 import defaultDecodeImage from "./decode-image";
+import { fetchGlacierPolygons, splitLineByGlacier } from "./glacier";
 import { HeightTile } from "./height-tile";
 import generateIsolines from "./isolines";
 import { encodeIndividualOptions, isAborted, withTimeout } from "./utils";
@@ -15,6 +16,7 @@ import type {
   IndividualContourTileOptions,
 } from "./types";
 import encodeVectorTile, { GeomType } from "./vtpbf";
+import type { Feature } from "./vtpbf";
 import { Timer } from "./performance";
 import { getData } from "./remote-protocol-handler";
 
@@ -161,6 +163,12 @@ export class LocalDemManager implements DemManager {
       elevationKey = "ele",
       levelKey = "level",
       subsampleBelow = 100,
+      glacierUrlPattern,
+      glacierSourceLayer,
+      glacierPropertyKey,
+      glacierPropertyValue,
+      glacierMaxzoom,
+      glacierKey = "glacier",
     } = options;
 
     // no levels means less than min zoom with levels specified
@@ -179,13 +187,13 @@ export class LocalDemManager implements DemManager {
               iy < 0 || iy >= max
                 ? undefined
                 : this.fetchDem(
-                  z,
-                  (ix + max) % max,
-                  iy,
-                  options,
-                  childAbortController,
-                  timer,
-                ),
+                    z,
+                    (ix + max) % max,
+                    iy,
+                    options,
+                    childAbortController,
+                    timer,
+                  ),
             );
           }
         }
@@ -216,25 +224,71 @@ export class LocalDemManager implements DemManager {
           buffer,
         );
 
+        const glacierPolygons = glacierUrlPattern
+          ? await fetchGlacierPolygons(
+              this.getTile,
+              {
+                glacierUrlPattern,
+                glacierSourceLayer,
+                glacierPropertyKey,
+                glacierPropertyValue,
+                glacierMaxzoom,
+              },
+              z,
+              x,
+              y,
+              extent,
+              childAbortController,
+            )
+          : null;
+
         mark?.();
+        const features: Feature[] = [];
+        for (const [eleString, geom] of Object.entries(isolines)) {
+          const ele = Number(eleString);
+          const properties = {
+            [elevationKey]: ele,
+            [levelKey]: Math.max(
+              ...levels.map((l, i) => (ele % l === 0 ? i : 0)),
+            ),
+          };
+
+          if (!glacierPolygons) {
+            features.push({
+              type: GeomType.LINESTRING,
+              geometry: geom,
+              properties,
+            });
+            continue;
+          }
+
+          const onGlacier: number[][] = [];
+          const offGlacier: number[][] = [];
+          for (const line of geom) {
+            for (const segment of splitLineByGlacier(line, glacierPolygons)) {
+              (segment.glacier ? onGlacier : offGlacier).push(segment.points);
+            }
+          }
+          if (onGlacier.length) {
+            features.push({
+              type: GeomType.LINESTRING,
+              geometry: onGlacier,
+              properties: { ...properties, [glacierKey]: true },
+            });
+          }
+          if (offGlacier.length) {
+            features.push({
+              type: GeomType.LINESTRING,
+              geometry: offGlacier,
+              properties: { ...properties, [glacierKey]: false },
+            });
+          }
+        }
+
         const result = encodeVectorTile({
           extent,
           layers: {
-            [contourLayer]: {
-              features: Object.entries(isolines).map(([eleString, geom]) => {
-                const ele = Number(eleString);
-                return {
-                  type: GeomType.LINESTRING,
-                  geometry: geom,
-                  properties: {
-                    [elevationKey]: ele,
-                    [levelKey]: Math.max(
-                      ...levels.map((l, i) => (ele % l === 0 ? i : 0)),
-                    ),
-                  },
-                };
-              }),
-            },
+            [contourLayer]: { features },
           },
         });
         mark?.();
@@ -247,14 +301,14 @@ export class LocalDemManager implements DemManager {
 
   async getElevation(
     [lat, lon]: [number, number],
-    scheme: 'tms' | 'xyz',
+    scheme: "tms" | "xyz",
     zoom: number,
     retryAtReducedZoom: number,
     abortController: AbortController,
   ): Promise<number> {
     let currentZoom = zoom;
 
-    while (currentZoom > 0 && (zoom - currentZoom) < retryAtReducedZoom) {
+    while (currentZoom > 0 && zoom - currentZoom < retryAtReducedZoom) {
       const n = 2 ** currentZoom;
 
       lat %= 360;
@@ -263,11 +317,12 @@ export class LocalDemManager implements DemManager {
       const latRad = (lat / 180) * Math.PI;
       const xtile = n * ((lon + 180) / 360);
       let ytile =
-        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
+        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
+          2) *
         n;
 
-      if (scheme === 'tms') {
-        ytile = n - ytile
+      if (scheme === "tms") {
+        ytile = n - ytile;
       }
 
       const x = Math.floor(xtile);
@@ -277,19 +332,26 @@ export class LocalDemManager implements DemManager {
       const remainderY = ytile - y;
 
       try {
-        const tile = await this.fetchAndParseTile(currentZoom, x, y, abortController);
+        const tile = await this.fetchAndParseTile(
+          currentZoom,
+          x,
+          y,
+          abortController,
+        );
         const heightTile = HeightTile.fromRawDem(tile);
 
         const tileX = Math.floor(tile.width * remainderX);
         const tileY = Math.floor(tile.width * remainderY);
 
-        const actualY = scheme === 'tms' ? tile.height - tileY : tileY
+        const actualY = scheme === "tms" ? tile.height - tileY : tileY;
         return heightTile.get(tileX, actualY);
       } catch (error) {
-        currentZoom -= 1
+        currentZoom -= 1;
       }
     }
 
-    throw new Error(`Failed to get elevation after ${retryAtReducedZoom} attempts at zoom ${zoom} to ${currentZoom}`);
+    throw new Error(
+      `Failed to get elevation after ${retryAtReducedZoom} attempts at zoom ${zoom} to ${currentZoom}`,
+    );
   }
 }

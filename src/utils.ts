@@ -63,6 +63,7 @@ export function decodeOptions(options: string): GlobalContourTileOptions {
           case "multiplier":
           case "overzoom":
           case "buffer":
+          case "glacierMaxzoom":
             v = Number(v);
         }
         return [k, v];

@@ -57,6 +57,22 @@ export interface ContourTileOptions {
   buffer?: number;
   /** When overzooming tiles, subsample to scale up to at least this size to make the contour lines smoother at higher zooms. */
   subsampleBelow?: number;
+  /**
+   * URL template (with `{z}` `{x}` `{y}` placeholders) for a vector tile source containing glacier/ice
+   * polygons. When set, each contour line is split into segments tagged with a `glacierKey` property
+   * depending on whether they fall inside one of those polygons.
+   */
+  glacierUrlPattern?: string;
+  /** Source layer within `glacierUrlPattern` tiles that contains the glacier polygons (default `"land"`) */
+  glacierSourceLayer?: string;
+  /** Property key used to identify glacier polygons within `glacierSourceLayer` (default `"kind"`) */
+  glacierPropertyKey?: string;
+  /** Property value that identifies a glacier polygon (default `"ice"`) */
+  glacierPropertyValue?: string;
+  /** Maximum zoom of the `glacierUrlPattern` source - above this, the ancestor tile is reused and cropped */
+  glacierMaxzoom?: number;
+  /** Key for the boolean "is this line on a glacier" property set on each contour line (default `"glacier"`) */
+  glacierKey?: string;
 }
 
 export interface GlobalContourTileOptions extends ContourTileOptions {
