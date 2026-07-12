@@ -179,6 +179,24 @@ export class LocalDemManager implements DemManager {
     return this.contourCache.get(
       key,
       async (_, childAbortController) => {
+        const glacierPolygonsPromise = glacierUrlPattern
+          ? fetchGlacierPolygons(
+              this.getTile,
+              {
+                glacierUrlPattern,
+                glacierSourceLayer,
+                glacierPropertyKey,
+                glacierPropertyValue,
+                glacierMaxzoom,
+              },
+              z,
+              x,
+              y,
+              extent,
+              childAbortController,
+            )
+          : null;
+
         const max = 1 << z;
         const neighborPromises: (Promise<HeightTile> | undefined)[] = [];
         for (let iy = y - 1; iy <= y + 1; iy++) {
@@ -224,23 +242,7 @@ export class LocalDemManager implements DemManager {
           buffer,
         );
 
-        const glacierPolygons = glacierUrlPattern
-          ? await fetchGlacierPolygons(
-              this.getTile,
-              {
-                glacierUrlPattern,
-                glacierSourceLayer,
-                glacierPropertyKey,
-                glacierPropertyValue,
-                glacierMaxzoom,
-              },
-              z,
-              x,
-              y,
-              extent,
-              childAbortController,
-            )
-          : null;
+        const glacierPolygons = await glacierPolygonsPromise;
 
         mark?.();
         const features: Feature[] = [];

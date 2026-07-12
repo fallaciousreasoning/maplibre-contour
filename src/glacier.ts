@@ -84,6 +84,67 @@ export async function fetchGlacierPolygons(
   }
 }
 
+interface BBox {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+function bboxOfRing(ring: number[], box: BBox): void {
+  for (let i = 0; i < ring.length; i += 2) {
+    const x = ring[i];
+    const y = ring[i + 1];
+    if (x < box.minX) box.minX = x;
+    if (x > box.maxX) box.maxX = x;
+    if (y < box.minY) box.minY = y;
+    if (y > box.maxY) box.maxY = y;
+  }
+}
+
+function emptyBBox(): BBox {
+  return { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+}
+
+function bboxContains(box: BBox, x: number, y: number): boolean {
+  return x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY;
+}
+
+function bboxIntersects(a: BBox, b: BBox): boolean {
+  return (
+    a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY
+  );
+}
+
+/**
+ * Per-polygon and overall bounding boxes for `polygons`, cached by array identity so repeated
+ * calls for every vertex of every contour line in a tile only compute them once.
+ */
+const bboxCache = new WeakMap<
+  GlacierPolygons,
+  { perPolygon: BBox[]; overall: BBox | null }
+>();
+
+function getBBoxes(polygons: GlacierPolygons) {
+  let cached = bboxCache.get(polygons);
+  if (cached) return cached;
+
+  const perPolygon: BBox[] = [];
+  const overall = emptyBBox();
+  for (const polygon of polygons) {
+    const box = emptyBBox();
+    for (const ring of polygon) bboxOfRing(ring, box);
+    perPolygon.push(box);
+    if (box.minX < overall.minX) overall.minX = box.minX;
+    if (box.maxX > overall.maxX) overall.maxX = box.maxX;
+    if (box.minY < overall.minY) overall.minY = box.minY;
+    if (box.maxY > overall.maxY) overall.maxY = box.maxY;
+  }
+  cached = { perPolygon, overall: polygons.length ? overall : null };
+  bboxCache.set(polygons, cached);
+  return cached;
+}
+
 function pointInRing(x: number, y: number, ring: number[]): boolean {
   let inside = false;
   const n = ring.length / 2;
@@ -108,8 +169,10 @@ function pointInPolygon(x: number, y: number, rings: number[][]): boolean {
 }
 
 function isInGlacier(x: number, y: number, polygons: GlacierPolygons): boolean {
-  for (const polygon of polygons) {
-    if (pointInPolygon(x, y, polygon)) return true;
+  const { perPolygon } = getBBoxes(polygons);
+  for (let i = 0; i < polygons.length; i++) {
+    if (!bboxContains(perPolygon[i], x, y)) continue;
+    if (pointInPolygon(x, y, polygons[i])) return true;
   }
   return false;
 }
@@ -125,6 +188,15 @@ export function splitLineByGlacier(
 ): { glacier: boolean; points: number[] }[] {
   const n = line.length / 2;
   if (n === 0) return [];
+
+  const { overall } = getBBoxes(polygons);
+  if (!overall) return [{ glacier: false, points: line }];
+
+  const lineBBox = emptyBBox();
+  bboxOfRing(line, lineBBox);
+  if (!bboxIntersects(lineBBox, overall)) {
+    return [{ glacier: false, points: line }];
+  }
 
   const result: { glacier: boolean; points: number[] }[] = [];
   let currentGlacier = isInGlacier(line[0], line[1], polygons);
